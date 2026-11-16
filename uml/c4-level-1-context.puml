@@ -1,0 +1,41 @@
+@startuml HotelReservationSystem_Context
+
+!include <C4/C4_Context>
+
+title C4 Level 1 - System Context Diagram: Hotel Reservation System
+
+' ========================================
+' PEOPLE
+' ========================================
+
+Person(guest, "Guest", "Searches for available rooms, creates reservations, makes payments, and manages bookings.")
+Person(receptionist, "Receptionist", "Manages guest records, reservations, check-in, check-out, and billing.")
+Person(manager, "Hotel Manager", "Manages room types, room rates, staff operations, and hotel performance.")
+Person(housekeeping, "Housekeeping Staff", "Updates room cleaning status and room operational availability.")
+
+' ========================================
+' MAIN SOFTWARE SYSTEM
+' ========================================
+
+System(hotel, "Hotel Reservation System", "A web-based system for managing hotel rooms, availability, guests, reservations, check-in/out, billing, payments, and hotel operations.")
+
+' ========================================
+' EXTERNAL SYSTEM
+' ========================================
+
+System_Ext(payment, "Simulated Payment Gateway", "Simulates payment authorization and returns transaction results. No real card information is processed.")
+
+' ========================================
+' RELATIONSHIPS
+' ========================================
+
+Rel(guest, hotel, "Searches rooms, creates and manages reservations, and views booking details")
+Rel(receptionist, hotel, "Registers guests, manages reservations, check-in/out, and billing")
+Rel(manager, hotel, "Manages room information, rates, staff operations, and reports")
+Rel(housekeeping, hotel, "Updates cleaning status and room availability")
+Rel(hotel, payment, "Sends simulated payment and refund requests")
+Rel(payment, hotel, "Returns transaction success or failure")
+
+LAYOUT_WITH_LEGEND()
+
+@enduml

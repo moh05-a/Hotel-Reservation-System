@@ -20,11 +20,11 @@ Housekeeping Staff: Updates the cleaning and operational status of rooms.
 
 Manage room types, physical rooms, and room rates.
 
-Search room availability based on dates and room type.
+Search available room types based on check-in date, check-out date, and number of guests.
 
 Create, view, modify, and cancel reservations.
 
-Prevent overbooking.
+Prevent overbooking by checking room-type inventory and overlapping reservation dates. Physical rooms are assigned during check-in, not during reservation creation.
 
 Store and manage guest records.
 

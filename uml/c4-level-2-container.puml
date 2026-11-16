@@ -1,0 +1,49 @@
+@startuml HotelReservationSystem_Container
+
+!include <C4/C4_Container>
+
+title C4 Level 2 - Container Diagram: Hotel Reservation System
+
+' ========================================
+' PEOPLE
+' ========================================
+
+Person(guest, "Guest", "Searches for rooms and manages reservations.")
+Person(receptionist, "Receptionist", "Manages guest records, bookings, check-in, and check-out.")
+Person(manager, "Hotel Manager", "Manages hotel operations, room rates, and reports.")
+Person(housekeeping, "Housekeeping Staff", "Updates room cleaning and availability status.")
+
+' ========================================
+' SYSTEM BOUNDARY
+' ========================================
+
+System_Boundary(hotel, "Hotel Reservation System") {
+    Container(web, "Web Frontend", "React + Vite", "Provides guest and staff interfaces for room search, reservations, booking management, check-in/out, billing, and operations.")
+    Container(api, "Backend API", "Python + FastAPI", "Handles authentication, authorization, room availability, reservations, guest records, check-in/out, billing, tax calculation, room operations, and payment integration.")
+    ContainerDb(db, "Application Database", "SQLite / PostgreSQL + SQLAlchemy", "Stores users, guests, rooms, room types, rates, reservations, payments, billing records, room statuses, and notification logs.")
+}
+
+' ========================================
+' EXTERNAL SYSTEM
+' ========================================
+
+System_Ext(payment, "Simulated Payment Gateway", "Simulates payment authorization and refunds. Does not process real card information.")
+
+' ========================================
+' RELATIONSHIPS
+' ========================================
+
+Rel(guest, web, "Uses", "HTTPS")
+Rel(receptionist, web, "Uses", "HTTPS")
+Rel(manager, web, "Uses", "HTTPS")
+Rel(housekeeping, web, "Uses", "HTTPS")
+
+Rel(web, api, "Sends requests and receives responses", "HTTPS / JSON REST API")
+Rel(api, db, "Reads and writes application data", "SQL via SQLAlchemy")
+
+Rel(api, payment, "Sends payment and refund requests", "HTTP / JSON")
+Rel(payment, api, "Returns transaction result", "HTTP / JSON")
+
+LAYOUT_WITH_LEGEND()
+
+@enduml

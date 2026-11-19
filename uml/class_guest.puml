@@ -1,0 +1,56 @@
+@startuml guest_class
+title Increment 4 - Guest Records and History - Class Diagram
+skinparam classAttributeIconSize 0
+
+class Guest {
+  +guestId: UUID
+  +fullName: String
+  +phone: String
+  +email: String
+  --
+  +updateContactInfo()
+}
+
+class Reservation {
+  +reservationId: UUID
+  +bookingReference: String
+  +checkInDate: Date
+  +checkOutDate: Date
+  +status: ReservationStatus
+}
+
+class Stay {
+  +stayId: UUID
+  +checkedInAt: DateTime
+  +checkedOutAt: DateTime
+}
+
+class GuestManagementService <<service>> {
+  +createGuest()
+  +searchGuests()
+  +viewGuest()
+  +updateGuest()
+  +recordMatchConfirmation()
+  +linkReservation()
+  +viewGuestHistory()
+}
+
+Guest "1" -- "0..*" Reservation : associated with
+Reservation "1" -- "0..1" Stay : results in
+
+GuestManagementService ..> Guest : manages
+GuestManagementService ..> Reservation : links and reads
+GuestManagementService ..> Stay : reads history
+
+note right of Guest
+  Guest record != login account.
+  Contact fields and nullability
+  will be decided in detailed design.
+end note
+
+note bottom of GuestManagementService
+  The receptionist verifies a returning
+  guest before a reservation is linked.
+  No automatic record merging.
+end note
+@enduml

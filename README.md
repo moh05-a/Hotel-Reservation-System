@@ -9,6 +9,7 @@ Team Members:
 Anas Alseddah – 20231119
 Yousef Taha – 20230981
 Mohammad Ameerah – 20230153
+Zein  A. Sunoqrot - 20221028
 
 Project Overview:
 The Hotel Reservation System is a web application designed to manage room availability, reservations, guest records, check-in/check-out, billing, simulated payments, and hotel operations.

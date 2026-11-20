@@ -1,0 +1,88 @@
+
+@startuml seq_checkin_checkout
+title Increment 7 - Check-in / Check-out Sequence Diagram
+
+autonumber
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+
+actor Receptionist
+participant "Staff UI" as UI
+participant "FastAPI Backend" as API
+participant "Reservation Service" as RS
+participant "Identity Verification Service" as IV
+participant "Room Service" as RMS
+participant "Stay Service" as SS
+database "Application Database" as DB
+
+== Find Reservation ==
+
+Receptionist -> UI: Search booking reference
+UI -> API: GET reservation by reference
+API -> RS: Find confirmed reservation
+RS -> DB: Retrieve reservation and guest
+DB --> RS: Reservation details
+RS --> API: Reservation details
+API --> UI: Display reservation
+UI --> Receptionist: Show guest and booking details
+
+== Check-in ==
+
+Receptionist -> UI: Confirm guest identity
+UI -> API: Submit manual verification result
+API -> IV: Record receptionist confirmation
+IV -> DB: Save verification record
+DB --> IV: Verification saved
+IV --> API: Verification confirmed
+
+Receptionist -> UI: Request room assignment
+UI -> API: Submit reservation and room selection
+API -> RS: Validate reservation status
+RS -> DB: Check confirmed reservation
+DB --> RS: Reservation status
+
+alt Reservation is not confirmed
+    RS --> API: Reject check-in
+    API --> UI: Return validation error
+else Reservation is confirmed
+    API -> RMS: Validate selected physical room
+    RMS -> DB: Check room type, availability and readiness
+    DB --> RMS: Room details and operational status
+
+    alt Room is unsuitable or unavailable
+        RMS --> API: Reject room assignment
+        API --> UI: Display reason
+    else Room is suitable
+        RMS --> API: Room assignment allowed
+        API -> SS: Create active stay
+        SS -> DB: Save stay and assign room
+        DB --> SS: Stay created
+        SS --> API: Check-in successful
+        API --> UI: Display check-in confirmation
+        UI --> Receptionist: Show active stay
+    end
+end
+
+== Check-out ==
+
+Receptionist -> UI: Select active stay and request checkout
+UI -> API: Submit checkout request
+API -> SS: Validate active stay
+SS -> DB: Retrieve stay and assigned room
+DB --> SS: Stay and room details
+
+alt Stay is not active
+    SS --> API: Reject checkout
+    API --> UI: Display validation error
+else Stay is active
+    SS -> DB: Record checkout time and end stay
+    SS -> RMS: Request room status update
+    RMS -> DB: Update room readiness status
+    DB --> RMS: Room updated
+    RMS --> SS: Room status update confirmed
+    SS --> API: Checkout successful
+    API --> UI: Display checkout confirmation
+    UI --> Receptionist: Show completed checkout
+end
+
+@enduml

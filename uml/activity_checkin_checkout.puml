@@ -1,0 +1,96 @@
+
+@startuml activity_checkin_checkout
+title Increment 7 - Check-in / Check-out Activity Diagram
+
+skinparam activity {
+  BackgroundColor White
+  BorderColor #333333
+  DiamondBackgroundColor #FFF2CC
+  DiamondBorderColor #333333
+}
+
+start
+
+partition Receptionist {
+  :Search for booking reference;
+}
+
+partition "Hotel Reservation System" {
+  :Retrieve reservation and guest details;
+  if (Reservation confirmed?) then (Yes)
+  else (No)
+    :Reject check-in;
+    stop
+  endif
+}
+
+partition Receptionist {
+  :Inspect guest identification manually;
+  :Confirm whether ID matches authorized guest;
+}
+
+partition "Hotel Reservation System" {
+  if (Identity verified and recorded?) then (Yes)
+  else (No)
+    :Reject check-in;
+    stop
+  endif
+
+  :Check reservation dates and room type;
+  :Retrieve suitable physical rooms;
+
+  if (Suitable room available?) then (Yes)
+  else (No)
+    :Reject room assignment;
+    stop
+  endif
+
+  :Validate room readiness;
+  if (Room is ready and not Out-of-Order?) then (Yes)
+  else (No)
+    :Reject room assignment;
+    stop
+  endif
+
+  :Prevent conflicting active room assignments;
+}
+
+partition Receptionist {
+  :Select physical room;
+  :Confirm check-in;
+}
+
+partition "Hotel Reservation System" {
+  :Create active Stay;
+  :Record check-in timestamp;
+  :Associate Stay with Reservation and Room;
+  :Record staff action in audit log;
+  :Display check-in confirmation;
+}
+
+partition Receptionist {
+  :Receive checkout request;
+  :Select active Stay;
+}
+
+partition "Hotel Reservation System" {
+  :Retrieve active Stay;
+
+  if (Stay is active?) then (Yes)
+  else (No)
+    :Reject checkout;
+    stop
+  endif
+
+  :Apply agreed early/late checkout rules;
+
+  :Record departure timestamp;
+  :Mark Stay as completed;
+  :Update physical room readiness status;
+  :Record checkout action in audit log;
+  :Display checkout confirmation;
+}
+
+stop
+
+@enduml

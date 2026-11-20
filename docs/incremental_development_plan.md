@@ -11,18 +11,18 @@ This plan uses the requirement IDs in `docs/requirements.md` and the account-fre
 | `v0.1.0` | Working | Runnable web/backend/database; staff login/logout and role checks | Setup instructions, auth interface/API and tests | `FR-AU-01–03`, `NFR-03`, `NFR-06`; auth modules/tests |
 | `v0.2.0-design` | Design | Room types, physical rooms, capacity and rates | Class diagram, ERD, validation and room-state rules | `FR-RM-01–05`; `uml/class_domain.puml`, `uml/erd_hotel.drawio` |
 | `v0.2.0` | Working | Room and rate management | Manager UI/API and CRUD/validation tests | `FR-RM-01–05`; room modules/tests |
-| `v0.3.0-design` | Design | Availability by dates, room-type capacity and inventory | Search sequence and date/operational rules | `FR-AV-01–03`, `NFR-02`; `uml/seq_availability.puml` |
-| `v0.3.0` | Working | Search available room types | Search UI/API and availability tests | `FR-AV-01–03`, `NFR-02`; availability modules/tests |
+| `v0.3.0-design` | Design | Availability including unexpired Pending holds | Search sequence, date, expiry-aware hold and room rules | `FR-AV-01–03`, `NFR-02`; `uml/seq_availability.puml` |
+| `v0.3.0` | Working | Room-type availability accounting for active Pending holds | Search UI/API, availability/expiry tests | `FR-AV-01–03`, `NFR-02`; availability modules/tests |
 | `v0.4.0-design` | Design | **Guest records without login accounts**; returning-guest matching and staff history | Guest model, ERD and identity-linking rules | `FR-GS-01–04`; `uml/class_domain.puml`, `uml/erd_hotel.drawio` |
 | `v0.4.0` | Working | Guest profiles, authorized search and linked stay history | Guest UI/API, persistence, linking and access tests | `FR-GS-01–04`; guest modules/tests |
-| `v0.5.0-design` | Design | Account-free room-type booking; unique booking reference and **secret access code** | Booking sequence, reservation state, code-issuance and inventory rules | `FR-RS-01–03`, `NFR-01`, `NFR-03`; `uml/seq_booking.puml`, `uml/state_reservation.puml` |
-| `v0.5.0` | Working | Create/confirm booking and issue credentials **without requiring payment** | Booking UI/API, access-code and concurrent overbooking tests | `FR-RS-01–03`, `NFR-01`, `NFR-03`; booking modules/tests |
-| `v0.6.0-design` | Design | View/modify/cancel **one booking** using reference + code, or authorized staff access | Booking-ownership, authorization and cancellation rules | `FR-RS-04–06`, `NFR-03`; `uml/state_reservation.puml` |
-| `v0.6.0` | Working | Secure guest/staff booking management | Booking UI/API, wrong-code and change/cancel tests | `FR-RS-04–06`, `NFR-03`; booking modules/tests |
+| `v0.5.0-design` | Design | Account-free booking with five-minute Pending hold and mandatory simulated payment | Sequence, state, rules and concurrency design | `FR-RS-01–03`, `NFR-01`, `NFR-03`; `docs/booking_rules.md`, `uml/seq_booking.puml`, `uml/state_reservation.puml` |
+| `v0.5.0` | Working | Confirm after successful simulated payment; expire holds and issue reference/secret | Booking UI/API, five-minute hold, retry, expiry, code-hash and concurrency tests | `FR-RS-01–03`, `NFR-01`, `NFR-03`; booking modules/tests |
+| `v0.6.0-design` | Design | Secure single-booking access, modification and cancellation with 24-hour refund policy | Access, state, date-change and refund rules | `FR-RS-04–06`, `NFR-03`; `docs/booking_rules.md`, `uml/state_reservation.puml` |
+| `v0.6.0` | Working | Secure view, capacity-safe modifications, cancellation and refund | Wrong-code, 24-hour cutoff, availability and refund tests | `FR-RS-04–06`, `NFR-03`; booking modules/tests |
 | `v0.7.0-design` | Design | **Manual simulated identity check**, room assignment, check-in/out | Front-desk sequence/activity diagrams, verification/readiness rules | `FR-CI-01–04`; `uml/seq_checkin_checkout.puml`, `uml/activity_checkin_checkout.puml` |
 | `v0.7.0` | Working | ID-check confirmation, physical-room assignment and check-in/out | Staff UI/API; identity, readiness and stay tests | `FR-CI-01–04`, `NFR-01`; front-desk modules/tests |
-| `v0.8.0-design` | Design | Billing, tax, folios, invoices and simulated transactions | Billing model, payment sequence and fee rules | `FR-BL-01–05`; `uml/seq_billing.puml`, `uml/erd_hotel.drawio` |
-| `v0.8.0` | Working | Bill generation, recorded simulated payment/refund | Invoice/payment UI/API and arithmetic tests | `FR-BL-01–05`; billing modules/tests |
+| `v0.8.0-design` | Design | Folios, invoices, JOD tax, simulated payments/reversals/refunds | Billing models, payment sequence, currency/rounding and coordination with mandatory booking payment | `FR-BL-01–05`; `uml/seq_billing.puml`, `uml/erd_hotel.drawio` |
+| `v0.8.0` | Working | Itemized billing and simulated payment/refund/reversal records | Invoices, arithmetic, reconciliation and refund tests | `FR-BL-01–05`; billing modules/tests |
 | `v0.9.0-design` | Design | Housekeeping and physical-room operational statuses | State diagram, change-history, readiness rules | `FR-OP-01–03`; `uml/state_room.puml` |
 | `v0.9.0` | Working | Cleaning and Out-of-Order management | Status UI/API, history and assignment-block tests | `FR-OP-01–03`; housekeeping modules/tests |
 | `v0.10.0-design` | Design | Manager dashboard metrics and filters | Metric definitions, sources and dashboard sequence | `FR-OP-04`; `uml/seq_dashboard.puml` |
@@ -43,8 +43,8 @@ This plan uses the requirement IDs in `docs/requirements.md` and the account-fre
 
 ### Increment 3: Availability Search — Anas Alseddah
 
-- **v0.3.0-design:** **Question:** How many rooms of each type are available across all requested nights? **Tools:** Sequence Diagram, scenario tables. **Accept:** Guest-count, overlap, checkout-exclusive and Out-of-Order assumptions documented with reservation/housekeeping owners.
-- **v0.3.0:** **Question:** Do searches return only genuinely available room types? **Tools:** Agentic AI, integration and performance tests. **Accept:** Fully booked, partial-overlap, adjacent-date, invalid-date and capacity cases pass.
+- **v0.3.0-design:** **Question:** How many rooms are available per night, including active Pending holds? **Tools:** Sequence Diagram, scenarios. **Accept:** Date overlaps, expiry, checkout-exclusive and Out-of-Order assumptions reviewed.
+- **v0.3.0:** **Question:** Do searches return truly available room types? **Tools:** Agentic AI, integration/performance tests. **Accept:** Sold-out, partial-overlap, adjacent-date, active/expired holds and invalid-input cases pass.
 
 ### Increment 4: Guest Records and History — Yousef Taha
 
@@ -53,13 +53,13 @@ This plan uses the requirement IDs in `docs/requirements.md` and the account-fre
 
 ### Increment 5: Reservation Creation — Yousef Taha
 
-- **v0.5.0-design:** **Question:** How are room types booked and how are booking access credentials created without guest registration or required payment? **Tools:** Sequence/State Diagrams, security and inventory rules. **Accept:** Reference/code generation, code hashing, booking status and atomic capacity-check rules reviewed.
-- **v0.5.0:** **Question:** Can guests book and receive booking credentials without overbooking? **Tools:** Agentic AI, integration/security tests. **Accept:** Guest booking persists; a unique reference and separate one-time-displayed code are issued, code isn't stored as plaintext; simultaneous sold-out bookings fail.
+- **v0.5.0-design:** **Question:** How do five-minute holds, mandatory simulated payment and access credentials work without guest registration? **Tools:** Sequence/State Diagrams, security and inventory rules. **Accept:** Pending, expiry/retries, confirmation, hashing and reversal paths reviewed.
+- **v0.5.0:** **Question:** Can payment confirm exactly one booking without overbooking? **Tools:** Agentic AI, concurrency/integration/security tests. **Accept:** Five-minute holds, original deadline on retries, one-time reference/code, successful payments and simultaneous-last-room cases pass.
 
 ### Increment 6: Booking Viewing and Changes — Yousef Taha
 
-- **v0.6.0-design:** **Question:** What exactly does a guest reference/code authorize, and when may a booking change? **Tools:** Requirements, reservation state diagram, access rules. **Accept:** Single-booking scope, wrong-code behavior, guessing safeguards, policy and availability rechecks agreed.
-- **v0.6.0:** **Question:** Can a verified guest manage only their own booking? **Tools:** Agentic AI, authorization/integration tests. **Accept:** Wrong codes, reference-only and cross-booking access fail; eligible changes/cancellations work and release capacity.
+- **v0.6.0-design:** **Question:** What booking access and cancellation/modification/refund rules apply? **Tools:** Requirements, state and access rules. **Accept:** Per-booking scope, 24-hour cutoff, NoShow, payment differences and refunds documented.
+- **v0.6.0:** **Question:** Can verified guests manage one eligible booking safely? **Tools:** Agentic AI, authorization/integration tests. **Accept:** Wrong codes fail; date changes preserve inventory, and cutoff/refund rules pass.
 
 ### Increment 7: Check-in / Check-out — Mohammad Ameerah
 
@@ -68,8 +68,8 @@ This plan uses the requirement IDs in `docs/requirements.md` and the account-fre
 
 ### Increment 8: Billing and Payments — Mohammad Ameerah
 
-- **v0.8.0-design:** **Question:** How are accommodation, extras, tax and simulated transactions calculated? **Tools:** Data/Sequence Diagrams and sample invoices. **Accept:** Folio, pricing/rounding, charge timing and simple refund rules reviewed; no actual card data.
-- **v0.8.0:** **Question:** Are folios and simulated payments correct? **Tools:** Agentic AI, API/arithmetic tests. **Accept:** Correct totals, itemized invoices and simulated payment/refund records; bookings do not require payment to receive their access codes.
+- **v0.8.0-design:** **Question:** How are taxes, extras, mandatory booking payments, reversals and refunds recorded? **Tools:** Data/Sequence Diagrams. **Accept:** JOD, configurable tax, pricing and simulated transaction rules reviewed without real cards.
+- **v0.8.0:** **Question:** Are folios and simulated transactions consistent? **Tools:** Agentic AI, arithmetic/API tests. **Accept:** Correct invoices, payments, reversals and refunds; mandatory booking payment is supported.
 
 ### Increment 9: Housekeeping — Zein A. Sunoqrot
 
@@ -89,9 +89,9 @@ This plan uses the requirement IDs in `docs/requirements.md` and the account-fre
 
 - **All members may begin design immediately.** Increment 7 can be designed and tested against mock confirmed reservations; Increment 9 can be designed against a proposed Room model.
 - **Foundation first for integration:** Increment 2 requires the database and staff roles from 1; Increment 4 needs the shared guest schema; Increment 3 uses room types from 2.
-- **Booking workflow:** Increment 5 integrates guest records (4) and availability (3). Increment 6 uses existing bookings (5) and the reference/code mechanism.
+- **Booking workflow:** Increment 5 integrates guest records (4), availability (3) and a basic mandatory simulated payment. Increment 6 builds on confirmed bookings, reference/code access and 24-hour cancellation/modification policies.
 - **Front desk:** Increment 7 depends on staff authorization, room records, guest information and confirmed reservations; it can be developed on its own branch before those integrations are ready.
-- **Billing/housekeeping/dashboard:** Increment 8 relies on stay/financial data; Increment 9 relies on physical rooms and can progress in parallel; Increment 10 can use sample metrics before all real data sources exist.
+- **Billing/housekeeping/dashboard:** Increment 8 expands the Increment 5 payment simulation with invoices, refunds, reversals and reconciliation. Increment 9 relies on physical rooms; Increment 10 can begin with sample metrics.
 - **Version tags:** Each `-design` and working tag identifies a **reviewed and merged** repository checkpoint. Maintain pull requests, branches, tests, `/prompts/` records, `docs/ai_development_log.md`, and `docs/traceability_matrix.md`; never delete merged branches.
 
 *Requirement IDs and diagram paths are planned references. Update the paths as editable diagrams and implementation modules are added to the repository.*

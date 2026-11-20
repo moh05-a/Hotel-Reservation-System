@@ -1,0 +1,41 @@
+@startuml
+title Physical Room Operational & Housekeeping State Diagram (v0.9.0)
+
+[*] --> Inspected : Room added and verified\n(Hotel Manager)
+
+state "Dirty" as Dirty
+state "Clean" as Clean
+state "Inspected" as Inspected
+state "Out-of-Order" as OOO
+
+Inspected --> Dirty : Guest checks out (FR-CI-03)\n[System / Receptionist]
+Clean --> Dirty : Guest checks out / Re-soiled\n[System / Housekeeping]
+Dirty --> Clean : Room cleaned\n[Housekeeping Staff]
+Clean --> Inspected : Inspection passed\n[Housekeeping Staff / Manager]
+Clean --> Dirty : Inspection failed\n[Housekeeping Staff / Manager]
+
+Dirty --> OOO : Maintenance issue reported\n[Housekeeping / Manager]
+Clean --> OOO : Maintenance issue reported\n[Housekeeping / Manager]
+Inspected --> OOO : Maintenance issue reported\n[Housekeeping / Manager]
+OOO --> Dirty : Maintenance completed\n[Hotel Manager / Housekeeping]
+
+note right of Inspected
+  **Check-in Readiness Rule (FR-OP-03):**
+  Only rooms in **Inspected** state
+  (and not currently occupied)
+  can be assigned at check-in.
+end note
+
+note right of OOO
+  **Blocked State (FR-OP-03):**
+  Out-of-Order rooms cannot be assigned
+  at check-in and are excluded from
+  available room-type inventory.
+end note
+
+note bottom
+  All transitions are validated server-side and logged in
+  RoomStatusHistory / AuditEvent (FR-OP-02, NFR-04).
+  Note: Operational status is separate from Reservation state.
+end note
+@enduml

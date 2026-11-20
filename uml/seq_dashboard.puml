@@ -1,0 +1,37 @@
+@startuml
+title Operations Dashboard Sequence Diagram (v0.10.0)
+
+actor "Hotel Manager" as Manager
+participant "Web Frontend\n(React + Vite)" as UI
+participant "Backend API\n(FastAPI)" as API
+participant "Auth Middleware\n(RBAC)" as Auth
+participant "Dashboard Service" as Service
+database "Application DB\n(SQLAlchemy)" as DB
+
+Manager -> UI : Open Operations Dashboard\n(select start_date, end_date)
+UI -> API : GET /api/dashboard/metrics?start_date&end_date\n(with staff token)
+API -> Auth : Verify session & Hotel Manager role (FR-AU-02, NFR-03)
+
+alt Unauthorized or non-Manager role
+  Auth --> API : 403 Forbidden
+  API --> UI : Return 403 Error
+  UI --> Manager : Display "Access Denied"
+else Authorized Hotel Manager
+  Auth --> API : Role verified (Hotel Manager)
+  API -> Service : get_dashboard_metrics(start_date, end_date)
+
+  Service -> DB : Query active rooms & housekeeping statuses\n(Room)
+  DB --> Service : Room counts by status & active capacity
+
+  Service -> DB : Query stays & reservations in range\n(Reservation, Stay)
+  DB --> Service : Occupied room-nights, arrivals, departures
+
+  Service -> DB : Query completed payments & refunds in range\n(Folio, Payment, Refund)
+  DB --> Service : Net recognized revenue
+
+  Service -> Service : Compute occupancy %, arrivals/departures,\nrevenue total, and readiness breakdown
+  Service --> API : DashboardMetricsDTO (JSON)
+  API --> UI : 200 OK (Dashboard JSON)
+  UI --> Manager : Render KPI cards, readiness counts & summary
+end
+@enduml

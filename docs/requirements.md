@@ -3,7 +3,7 @@
 **Group:** 15  
 **Course:** CS13477 Software Engineering — Fall 2026  
 **Document:** `docs/requirements.md`  
-**Status:** Revised draft for team review. Agreed guest access model included; remaining policy decisions are marked **TBD**.
+**Status:** Revised draft for team review. Account-free guest access, five-minute booking holds, mandatory simulated payment, and agreed booking policies are documented; remaining integration details are marked **TBD**.
 
 ## 1. Purpose
 
@@ -19,7 +19,7 @@ This document states the functional and non-functional requirements for the Hote
 - **Account-free guest booking**, with a booking reference and separate secret access code for access to one booking.
 - Persistent guest records, authorized staff search, and linked reservation/stay history.
 - Physical-room assignment and **simulated manual identity verification** at check-in; check-out.
-- Folios, tax, invoices, extra charges, and simulated payment/refund records.
+- Mandatory simulated payment before booking confirmation; folios, tax, invoices, extra charges, and simulated payment/refund records.
 - Housekeeping/operational room status and management dashboard.
 
 ### 2.2 Out of scope
@@ -46,15 +46,16 @@ This document states the functional and non-functional requirements for the Hote
 2. A guest books a **room type**, not a particular room number. A physical room is assigned only at check-in.
 3. Each room type has a maximum guest count and a nightly rate. Availability is based on room-type inventory across **every night** of the stay.
 4. The check-in date is inclusive and check-out date exclusive. For example, November 20–23 and November 23–25 do not overlap.
-5. Confirmed reservations use room-type inventory. The booking operation must recheck capacity atomically so concurrent requests cannot overbook. The treatment of **Pending** reservations is **TBD**.
-6. Guests do **not** register or log in. Successful creation/confirmation issues a unique booking reference and an independently generated, unpredictable access code. The access code is shown once, stored as a secure hash, and required with the reference for later guest booking access.
-7. Booking access credentials are **not** dependent on simulated payment. Real payments and real card data are not used; payment simulation is part of billing (Increment 8).
+5. Confirmed reservations and unexpired **Pending** holds consume room-type inventory per booked night. After the guest proceeds to payment, an atomic capacity check creates one Pending hold with `expires_at = server_time + 5 minutes`. Expired or explicitly cancelled holds release capacity; refreshing or retrying payment must not extend the deadline.
+6. Guests do **not** register or log in. Only after successful simulated payment and atomic confirmation of an unexpired hold does the system issue a unique booking reference and independent, unpredictable secret access code. The code is shown once, stored only as a secure hash, and required with the reference for later access to that one booking.
+7. **Successful simulated payment is required** to confirm a booking and issue booking credentials. Failed payment attempts can be retried within the original five-minute hold. Payment successes that cannot be committed must be reversed or recorded for reconciliation. No real payments or card data are used; Increment 5 provides basic simulation and Increment 8 expands billing/refunds.
 8. Staff authenticate using their accounts and roles. Guest booking credentials cannot be used to access staff functions, guest profiles, or full booking history.
 9. A new reservation references a guest record. Receptionists can search for existing guest records and, after checking the identity match, link a returning guest's reservation/stay history. **Do not automatically merge guest records based only on name, email, or phone.**
 10. At physical check-in, receptionists check the presented identification against the booked/authorized guest and record a **simulated manual verification** result before completing check-in. No real ID image or governmental service is required.
 11. Out-of-Order rooms must not be assigned. How operational blocks reduce future room-type inventory is a design decision to finalize with Increments 3, 7, and 9.
-12. Tax is a configurable fixed percentage, nightly rates are per room type, and charges/refunds are simulated. Cancellation, no-show, detailed pricing, early/late check-out, and access-code recovery policies are **TBD**.
-13. No real SMS/email is delivered. If notification events are represented, they are logged locally and must not expose secret codes.
+12. Currency is **JOD**, standard check-in is **14:00**, standard check-out is **12:00**, and tax is a configurable percentage (exact demo rate and rounding remain TBD). A Confirmed booking may be cancelled before scheduled check-in: **at least 24 hours** beforehand gives a **100% simulated refund**; less than 24 hours beforehand gives **no refund**. Date modification requires 24 hours' notice, availability rechecks, and simulated settlement of the price difference. At **12:00 noon the following day**, an unchecked-in Confirmed reservation becomes `NoShow` without refund and without a late-arrival exception. Early/late check-out and some pricing details remain TBD.
+13. No real SMS/email is delivered. Notification logs, if present, must never expose secret codes.
+14. Lost codes are reset only after receptionist verification, invalidating the prior code. Expired holds remain recorded for audit; hold creation, retries and access-code verification have anti-abuse protections.
 
 ## 5. Functional Requirements
 
@@ -84,7 +85,7 @@ Each requirement has a stable ID, a testable statement, and an example acceptanc
 |---|---|---|
 | **FR-AV-01** | The system shall let guests search room types using check-in/check-out dates, guest count, and an optional room-type filter. | Valid searches return results; invalid dates and nonpositive guest counts are rejected. |
 | **FR-AV-02** | The system shall display only room types whose guest capacity and remaining inventory cover the **entire** requested stay. | Sold-out or undersized types are excluded, including a type unavailable on just one requested night. |
-| **FR-AV-03** | The system shall calculate room-type availability using overlapping inventory-consuming reservations and applicable room-unavailability rules, consistent with the check-out-exclusive convention. | Adjacent non-overlapping stays are permitted; relevant overlapping bookings reduce inventory; Out-of-Order treatment follows the agreed rule. |
+| **FR-AV-03** | The system shall calculate room-type availability using overlapping Confirmed reservations, **unexpired five-minute Pending holds**, and applicable room-unavailability rules, consistently with the check-out-exclusive convention. | Active holds reduce inventory across every requested night; expired/cancelled holds do not, even when background cleanup is delayed. |
 
 ### 5.4 Guest Records and History — v0.4.0 (Yousef Taha)
 
@@ -99,17 +100,17 @@ Each requirement has a stable ID, a testable statement, and an example acceptanc
 
 | ID | Requirement | Verification / acceptance check |
 |---|---|---|
-| **FR-RS-01** | The system shall allow a guest without an account, or an authorized receptionist, to initiate a room-**type** reservation with guest details, dates, and guest count; no physical room is assigned at this stage. | Booking inputs are validated and linked to a guest record without a room number. |
-| **FR-RS-02** | The system shall store a valid reservation with a unique booking reference, status (Pending/Confirmed where applicable), and a separately generated secret access code made available to the guest upon successful booking creation/confirmation. | Booking reference is unique; code is shown to the booking guest once, stored only as a hash, and never re-displayed from the database; payment is not required to issue it. |
-| **FR-RS-03** | Before confirmation, the system shall recheck room-type capacity for every reserved night and prevent overbooking, including concurrent conflicting requests. | A booking with available capacity succeeds; two simultaneous requests cannot both consume the final available room. |
+| **FR-RS-01** | The system shall allow account-free guests and authorized receptionists to enter guest details, dates, room type and guest count; proceeding to payment creates an **atomic five-minute Pending reservation hold** when capacity exists, without assigning a physical room. | Valid details create exactly one Pending hold linked to a guest record, reducing nightly availability; duplicate Next requests do not create extra holds. |
+| **FR-RS-02** | The system shall confirm an unexpired Pending reservation **only after successful simulated payment and database commit**, then issue a unique booking reference and separate unpredictable secret access code. | A failed payment permits retry in the original five minutes; successful payment confirms once; the secret is shown once and stored only as a secure hash; no code is issued to an expired or unconfirmed booking. |
+| **FR-RS-03** | The system shall protect Pending hold creation and Pending-to-Confirmed conversion with concurrency-safe database operations, counting active holds and Confirmed reservations on every booked night to prevent overbooking. | Two simultaneous guests cannot both hold the final room-type unit; expiry/cancellation release capacity; late payment cannot confirm an expired hold. |
 
 ### 5.6 Reservation Viewing, Modification, and Cancellation — v0.6.0 (Yousef Taha)
 
 | ID | Requirement | Verification / acceptance check |
 |---|---|---|
 | **FR-RS-04** | The system shall allow guests to view **only the reservation identified by both its booking reference and matching secret access code**; authorized receptionists may find bookings through their staff permissions. | Reference alone, wrong code, or another booking's code does not reveal reservation information; receptionist lookup is authorized. |
-| **FR-RS-05** | The system shall allow a guest who supplies the matching reference and code, or an authorized receptionist, to modify an eligible reservation, following the agreed policy and rechecking availability. | Authorized changes persist; incorrect codes, disallowed changes, and over-capacity dates are rejected. |
-| **FR-RS-06** | The system shall allow a verified guest or authorized receptionist to cancel an eligible reservation according to the cancellation policy and release its inventory. | Correct credentials plus eligible status permit cancellation; canceled capacity is returned; wrong credentials or disallowed requests fail. |
+| **FR-RS-05** | The system shall let an authorized guest (matching reference and secret code) or receptionist modify eligible Confirmed bookings; date changes require at least **24 hours before scheduled check-in**, a protected availability recheck, and simulated additional payment/refund of any price difference. | Eligible changes settle the difference without losing original inventory; unauthorized, too-late, unavailable or invalid-state changes fail safely. |
+| **FR-RS-06** | The system shall allow an authorized guest/receptionist to cancel a Confirmed booking **before scheduled check-in at 14:00** and release inventory; cancellation **at least 24 hours before** gives a **100% simulated refund**, otherwise **no refund**. An unpaid Pending hold may also be explicitly cancelled. | Correct credentials and eligible state permit cancellation; refund cutoff is relative to 14:00 hotel-local check-in; invalid/late requests fail; a cancelled Pending hold releases inventory without refund. |
 
 ### 5.7 Check-in, Room Assignment, and Check-out — v0.7.0 (Mohammad Ameerah)
 
@@ -128,7 +129,7 @@ Each requirement has a stable ID, a testable statement, and an example acceptanc
 | **FR-BL-02** | The system shall allow authorized staff to add and view itemized extra charges on a folio. | Each extra charge appears correctly and is not duplicated. |
 | **FR-BL-03** | The system shall apply the configurable tax percentage and compute subtotal, tax, and total accurately. | A known test invoice matches independently calculated totals. |
 | **FR-BL-04** | The system shall allow authorized staff to generate and view an itemized bill/invoice using recorded stay and folio details. | Itemization, totals, and related reservation are correct. |
-| **FR-BL-05** | The system shall record simulated payment/refund transactions, their amounts and statuses, without connecting to a real gateway or collecting card details; a simulated payment is **not a prerequisite** to generating booking access credentials. | Successful/failed simulated payments and permitted refunds are recorded; reservation creation still works without payment. |
+| **FR-BL-05** | The system shall record simulated booking payments, additional payments, reversals and refunds with statuses, without real bank connections or card storage. Successful simulated booking payment is **required before booking confirmation and credential issuance**; Increment 8 extends billing and transaction records. | Failed payment cannot confirm; success and valid hold may confirm; failed/expired confirmations record reversal or reconciliation, and refunds match policy; no real money moves. |
 
 ### 5.9 Housekeeping and Operations — v0.9.0 / v0.10.0 (Zein A. Sunoqrot)
 
@@ -145,11 +146,11 @@ Each requirement has a stable ID, a testable statement, and an example acceptanc
 
 | ID | Requirement | Verification / acceptance check |
 |---|---|---|
-| **NFR-01 — Integrity** | The system shall prevent inventory overbooking and conflicting physical-room assignments, including simultaneous reservation attempts; important data relationships shall remain consistent. | Concurrent reservation and assignment tests preserve available inventory and database relationships. |
+| **NFR-01 — Integrity** | The system shall prevent overbooking and conflicting physical-room assignment, including simultaneous Pending hold creation and confirmation, while keeping guest, hold, reservation and payment records consistent. | Concurrent holds for the last room yield at most one valid hold; expired holds release capacity; failed commits cannot report confirmed bookings. |
 | **NFR-02 — Performance** | Core interactive requests, particularly room-type search and booking lookup, shall complete in **under 2 seconds** under the agreed demonstration workload. | Repeatable timed tests; exact data volume, concurrency, and measurement method are **TBD**. |
-| **NFR-03 — Security** | Staff passwords and guest booking-access codes shall be stored as strong hashes; staff permissions and per-booking guest access shall be enforced server-side, with limits on repeated code guesses. Access codes shall not appear in ordinary logs or later API responses. | Plaintext secret inspection finds none; wrong codes, attempts to enumerate references, and unauthorized actions are rejected or throttled. |
+| **NFR-03 — Security** | Staff passwords and booking codes use strong one-way hashing. Staff and per-booking guest permissions are enforced server-side; hold creation, payment attempts and access-code guesses are rate-limited. Codes cannot appear in ordinary logs or later API responses. | Plaintext secret inspection finds none; cross-booking access and repeated guesses fail or are throttled; duplicate hold/payment submissions cannot bypass controls. |
 | **NFR-04 — Auditability** | The system shall audit important staff actions and booking/status changes with action, affected record, time, and responsible user or actor where possible; secret codes and sensitive ID material shall not be logged. | Example modifications, check-ins, payments, and status updates produce audit records without secrets. |
-| **NFR-05 — Usability** | Guests shall be able to search/book and manage one booking through the web UI without registering; staff shall be able to complete role-appropriate tasks via web UI without terminal commands. | Demo guest books without an account and accesses a booking using both credentials; staff workflows function in the browser. |
+| **NFR-05 — Usability** | Guests shall search rooms, hold inventory, complete required simulated payment, and manage one booking through the web UI without registration; staff use appropriate web UI. | Demo shows five-minute countdown, retries with unchanged deadline, confirmation credentials only after success and no required guest login or terminal commands. |
 | **NFR-06 — Reproducibility** | The repo shall document dependency installation, environment configuration, database initialization, demo data, running the application, and automated tests. | Another team member can run the system and tests from a clean clone following instructions. |
 
 ## 7. Data and Lifecycle Concepts
@@ -159,14 +160,14 @@ The Class Diagram and ERD will specify the details of these entities:
 - **RoomType:** capacity, nightly rate, and physical-room inventory.
 - **Room:** unique room number, type, operational/housekeeping condition, and eligibility for assignment.
 - **Guest:** internal `guest_id`, personal/contact details needed for reservations; **not** a login account.
-- **Reservation:** guest reference, room type, dates, guest count, price snapshot where applicable, booking reference, **hashed** booking-access code, and status.
+- **Reservation:** guest reference, room type, dates, guest count, JOD price snapshot, booking reference, hashed access code, status, Pending `created_at`/`expires_at`, and simulated payment linkage.
 - **Stay/RoomAssignment:** confirmed identity-check indicator, physical room, arrival/departure, and occupancy details.
 - **Folio/Charge/Invoice/Payment/Refund:** itemized financial details and simulated transaction outcomes.
 - **StaffUser/Role/AuditEvent:** staff login identity, permissions, and reviewable audit history.
 
 A single Guest may have zero or many Reservations, and each Reservation belongs to one Guest. One verified guest's reservations/stays can be shown in staff history. Never treat knowing one reservation's secret code as proof of authority to view other records linked to the same guest.
 
-The reservation state model will use **Pending**, **Confirmed**, **CheckedIn**, **CheckedOut**, **Cancelled**, and **NoShow** as applicable. The rules for Pending and NoShow are **TBD**.
+The reservation state model uses **Pending**, **Confirmed**, **Expired**, **CheckedIn**, **CheckedOut**, **Cancelled**, and **NoShow**. Pending holds inventory for five minutes; failed payment leaves it Pending without extending expiry. Confirmed requires successful simulated payment, an active hold and committed reservation. NoShow follows the next-day-noon deadline.
 
 ## 8. Requirements-to-Increment Mapping
 
@@ -188,20 +189,20 @@ The reservation state model will use **Pending**, **Confirmed**, **CheckedIn**, 
 
 ## 9. Open Decisions Requiring Team Agreement
 
-The **guest account decision is closed**: guests book without logging in and access only a specific reservation using a reference plus a secret code. The following details still require agreement before the affected increments are fully implemented.
+The **account-free model and booking policies** are working design decisions approved by the Increment 5 owner, pending team review: five-minute inventory holds, mandatory simulated payment, same-window retries, 24-hour cancellation/modification rules, and next-day-noon NoShow without a late-arrival exception. The following implementation details remain open:
 
 | Topic | Decision needed | Relevant increments |
 |---|---|---|
-| **Lost booking code** | Staff-verified secure reissue/reset process without real email/SMS; rules for invalidating old codes. | v0.5.0–v0.6.0 |
-| **Returning guest matching** | Which fields the receptionist checks before linking records; handling duplicate profiles; no automatic matching based on contact info alone. | v0.4.0–v0.5.0 |
-| **Pending/NoShow** | Whether Pending holds inventory, its expiry, and when a confirmed booking becomes NoShow. | v0.5.0–v0.7.0 |
-| **Unavailable room blocks** | How past/current/future Out-of-Order periods affect type-level availability and existing reservations. | v0.3.0, v0.7.0, v0.9.0 |
-| **Cancellation and modification** | Eligible booking statuses, deadlines, penalties and effects on financial records. | v0.6.0–v0.8.0 |
-| **Pricing and payments** | Currency, rate snapshots, tax rounding, tax on extras, when simulated payment is optionally collected, and refund triggers. | v0.2.0, v0.5.0, v0.8.0 |
-| **Room readiness** | Whether Clean or Inspected is needed for assignment, who may update states, and exceptions. | v0.7.0–v0.9.0 |
-| **Early/late checkout** | When checkout is allowed and how extra fees are calculated. | v0.7.0–v0.8.0 |
-| **Dashboard metrics** | Definitions of occupancy, recognized revenue, and date filters. | v0.10.0 |
-| **Performance evaluation** | Dataset size, concurrent requests, environment, and how to measure the 2-second target. | NFR-02 |
+| **Lost booking code** | Exact receptionist verification and secure reissue process (old code invalidated; no real SMS/email). | v0.5.0–v0.6.0 |
+| **Returning guest matching** | Exact fields checked and how duplicate records are handled without automatic contact-only merging. | v0.4.0–v0.5.0 |
+| **Unavailable room blocks** | Impact of past/future Out-of-Order periods on inventory and existing reservations. | v0.3.0, v0.7.0, v0.9.0 |
+| **Payment implementation** | Idempotency, reversal/reconciliation failure handling and ownership across Increments 5 and 8. | v0.5.0, v0.8.0 |
+| **Pricing and tax** | Demo tax rate, rounding, extras and invoice details; currency JOD and rate snapshots are agreed. | v0.2.0, v0.5.0, v0.8.0 |
+| **Anti-abuse** | Configurable request limits across sessions; one active Pending hold per session is the initial rule. | v0.5.0 |
+| **Room readiness** | Clean versus Inspected assignment requirements and authorized exceptions. | v0.7.0–v0.9.0 |
+| **Early/late checkout** | Allowed timing and fee calculation. | v0.7.0–v0.8.0 |
+| **Dashboard metrics** | Occupancy, recognized revenue and date filters. | v0.10.0 |
+| **Performance evaluation** | Dataset, concurrency and two-second-target measurement process. | NFR-02 |
 
 ## 10. Review and Change Control
 

@@ -1,0 +1,52 @@
+@startuml state_reservation
+title Increment 5 - Reservation State Diagram (Approved Policies)
+
+hide empty description
+
+[*] --> Pending : Valid request / atomic 5-minute hold created
+
+Pending --> Pending : Payment fails / retry until original deadline
+Pending --> Confirmed : Simulated payment succeeds\n[before expiresAt and DB commit succeeds]
+Pending --> Expired : now >= expiresAt / release held inventory
+Pending --> Cancelled : Guest explicitly cancels payment / release hold
+
+Confirmed --> CheckedIn : Receptionist verifies identity\nand assigns suitable physical room
+CheckedIn --> CheckedOut : Receptionist completes check-out
+Confirmed --> Cancelled : Eligible cancellation before check-in\n/ release inventory; apply refund policy
+Confirmed --> NoShow : No arrival by 12:00 noon\non day after scheduled check-in
+
+Expired --> [*]
+Cancelled --> [*]
+NoShow --> [*]
+CheckedOut --> [*]
+
+note right of Pending
+  This is a persisted temporary reservation.
+  Holds room-type inventory, NOT a room number.
+  expiresAt = server creation time + 5 minutes.
+  Payment retries never extend the deadline.
+  A failed payment does not change the state.
+end note
+
+note right of Confirmed
+  Requires successful simulated payment,
+  valid unexpired hold, and database commit.
+  Booking reference and random secret code
+  are issued; only the code hash is stored.
+end note
+
+note bottom of Cancelled
+  Confirmed booking: cancellation permitted
+  before scheduled check-in (14:00 local time).
+  >= 24 hours before: 100% simulated refund.
+  < 24 hours before: no refund.
+  Pending cancellation simply releases the hold.
+end note
+
+note right of NoShow
+  No show if not checked in by 12:00 noon
+  the following day; no simulated refund.
+  Release capacity for remaining future nights.
+end note
+
+@enduml

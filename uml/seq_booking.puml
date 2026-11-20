@@ -1,0 +1,108 @@
+@startuml seq_booking
+title Increment 5 - Reservation Creation with 5-Minute Temporary Hold
+
+autonumber
+
+actor Guest
+boundary "Booking Web Page" as UI
+control "Booking Service" as Booking
+control "Availability Service" as Availability
+control "Simulated Payment Service" as Payment
+control "Credential Service" as Credentials
+database "Hotel Database" as DB
+control "Expiry Worker" as Expiry
+
+note over UI,Booking
+  Countdown is displayed by the frontend,
+  but the server enforces the fixed expiresAt.
+  Failed payment retries do not reset it.
+end note
+
+Guest -> UI : Select room type, dates, guest count, contact details
+Guest -> UI : Next / Proceed to Payment
+UI -> Booking : Create temporary hold (requestId, details)
+Booking -> Booking : Validate input and anti-abuse limits
+
+alt Invalid input / duplicate or excessive hold request
+  Booking --> UI : Validation / rate-limit response
+  UI --> Guest : Show error or existing hold
+else Valid request
+  Booking -> DB : BEGIN transaction; protect room-type inventory
+  Booking -> Availability : Check capacity across all requested nights
+  Availability -> DB : Count Confirmed bookings and unexpired Pending holds
+  DB --> Availability : Inventory counts
+  Availability --> Booking : Available / unavailable
+
+  alt Room type unavailable
+    Booking -> DB : ROLLBACK
+    Booking --> UI : No capacity for requested dates
+    UI --> Guest : Choose another option
+  else Capacity available
+    Booking -> DB : Create/link Guest safely; insert Pending hold\nwith expiresAt = serverNow + 5 minutes
+    Booking -> DB : COMMIT
+    DB --> Booking : holdId and expiresAt
+    Booking --> UI : Payment page, holdId, expiresAt
+    UI --> Guest : Display five-minute countdown
+
+    loop Each payment attempt while hold remains Pending and unexpired
+      Guest -> UI : Attempt simulated payment
+      UI -> Booking : Pay (holdId, attemptId)
+      Booking -> DB : Check hold status and server-side expiry
+      DB --> Booking : Current status and expiresAt
+
+      alt Hold already expired or inactive
+        Booking --> UI : Hold expired / cannot pay
+        UI --> Guest : Start a new booking
+      else Active Pending hold
+        Booking -> Payment : Process simulated payment (attemptId)
+        Payment --> Booking : Failure / success
+
+        alt Payment failed
+          Booking -> DB : Record failed payment attempt
+          Booking --> UI : Retry allowed until original expiresAt
+          UI --> Guest : Display failure and remaining time
+        else Payment successful
+          Booking -> DB : BEGIN transaction; lock Pending hold
+          Booking -> DB : Verify still Pending and now < expiresAt
+          DB --> Booking : Eligible / expired
+
+          alt Expired before confirmation
+            Booking -> DB : Change Pending to Expired; release hold; COMMIT
+            Booking -> Payment : Reverse simulated payment
+            Payment --> Booking : Reversal recorded / reconciliation status
+            Booking --> UI : Booking not confirmed; hold expired
+            UI --> Guest : Show expiry message
+          else Still eligible
+            Booking -> Credentials : Generate unique reference, random secret and hash
+            Credentials --> Booking : Reference, one-time code, secure hash
+            Booking -> DB : Set Pending -> Confirmed; save reference, code hash,\nprice snapshot and successful payment record
+            Booking -> DB : COMMIT
+
+            alt Commit failed
+              DB --> Booking : Database error (transaction rolled back)
+              Booking -> Payment : Reverse payment or flag for reconciliation
+              Payment --> Booking : Reversal / reconciliation result
+              Booking --> UI : Not confirmed; show safe failure message
+              UI --> Guest : Do not display booking credentials
+            else Commit successful
+              DB --> Booking : Confirmed reservation saved
+              Booking --> UI : Booking confirmation, reference, secret code
+              UI --> Guest : Display booking credentials once
+            end
+          end
+        end
+      end
+    end
+  end
+end
+
+== Expiration and availability ==
+Expiry -> DB : Mark Pending holds Expired when expiresAt <= now
+DB --> Expiry : Expired holds released
+note over Availability,DB
+  Availability always excludes expired holds based on server time,
+  even if the expiry worker has not updated their status yet.
+  All capacity-consuming holds and confirmed bookings count per night.
+end note
+
+@enduml

@@ -1,41 +1,35 @@
 @startuml
-title Physical Room Operational & Housekeeping State Diagram (v0.9.0)
+title Room Housekeeping & Operational State Machine (v0.9.0)
 
-[*] --> Inspected : Room added and verified\n(Hotel Manager)
+[*] --> Inspected : Room created & verified\n(is_active = true)
 
-state "Dirty" as Dirty
-state "Clean" as Clean
-state "Inspected" as Inspected
-state "Out-of-Order" as OOO
+state "Dirty" as Dirty : Needs cleaning\nNot eligible for assignment
+state "Clean" as Clean : Cleaned by housekeeping\nAwaiting supervisor inspection\nNot eligible for assignment
+state "Inspected" as Inspected : Verified ready\nEligible for guest assignment (FR-OP-03)
+state "Occupied" as Occupied : Active stay (CheckedIn)\nRoom locked from reassignment
+state "Out-of-Order" as OOO : Maintenance / unavailable\nExcluded from immediate check-in
 
-Inspected --> Dirty : Guest checks out (FR-CI-03)\n[System / Receptionist]
-Clean --> Dirty : Guest checks out / Re-soiled\n[System / Housekeeping]
-Dirty --> Clean : Room cleaned\n[Housekeeping Staff]
-Clean --> Inspected : Inspection passed\n[Housekeeping Staff / Manager]
-Clean --> Dirty : Inspection failed\n[Housekeeping Staff / Manager]
+Dirty --> Clean : markClean()\n[Housekeeping Staff]
+Clean --> Inspected : markInspected()\n[Supervisor / Manager]
+Clean --> Dirty : Failed inspection / Re-soiled\n[Supervisor / Housekeeping]
 
-Dirty --> OOO : Maintenance issue reported\n[Housekeeping / Manager]
-Clean --> OOO : Maintenance issue reported\n[Housekeeping / Manager]
-Inspected --> OOO : Maintenance issue reported\n[Housekeeping / Manager]
-OOO --> Dirty : Maintenance completed\n[Hotel Manager / Housekeeping]
+Inspected --> Occupied : Guest checks in\n[Front Desk: Inspected & active only]
+Occupied --> Dirty : Guest checks out\n[System Auto-Transition]
+
+Dirty --> OOO : markOutOfOrder(reason)\n[Manager / Maintenance]
+Clean --> OOO : markOutOfOrder(reason)\n[Manager / Maintenance]
+Inspected --> OOO : markOutOfOrder(reason)\n[Manager / Maintenance]
+
+OOO --> Dirty : resolveMaintenance()\n[Must be cleaned & inspected before reuse]
+
+Inspected --> [*] : deactivateRoom()\n[is_active = false]
+Dirty --> [*] : deactivateRoom()\n[is_active = false]
+OOO --> [*] : deactivateRoom()\n[is_active = false]
 
 note right of Inspected
-  **Check-in Readiness Rule (FR-OP-03):**
-  Only rooms in **Inspected** state
-  (and not currently occupied)
-  can be assigned at check-in.
-end note
-
-note right of OOO
-  **Blocked State (FR-OP-03):**
-  Out-of-Order rooms cannot be assigned
-  at check-in and are excluded from
-  available room-type inventory.
-end note
-
-note bottom
-  All transitions are validated server-side and logged in
-  RoomStatusHistory / AuditEvent (FR-OP-02, NFR-04).
-  Note: Operational status is separate from Reservation state.
+  Assignment Rule (FR-OP-03):
+  Only rooms in Inspected state
+  with is_active = true and no
+  overlapping stay can be assigned.
 end note
 @enduml

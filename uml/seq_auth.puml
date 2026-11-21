@@ -1,0 +1,79 @@
+
+@startuml seq_auth
+
+title Hotel Reservation System - Staff Authentication
+
+actor "Hotel Staff" as Staff
+participant "React Frontend" as UI
+participant "FastAPI Backend" as API
+database "PostgreSQL Database" as DB
+
+== Staff Login ==
+
+Staff -> UI: Enter username and password
+UI -> API: POST /api/auth/login
+activate API
+
+API -> DB: Find staff account by username
+DB --> API: Staff details and password hash
+
+alt Valid password and active account
+    API -> API: Verify password hash
+    API -> API: Generate secure session token
+    API -> DB: Store hashed token and expiration
+    DB --> API: Session saved
+    API --> UI: 200 OK + HttpOnly session cookie
+    UI --> Staff: Display staff interface
+else Invalid credentials or inactive account
+    API --> UI: 401 Unauthorized
+    UI --> Staff: Display login error
+end
+
+deactivate API
+
+== Access Protected Function ==
+
+Staff -> UI: Request protected function
+UI -> API: API request with session cookie
+activate API
+
+API -> DB: Validate session and load staff role
+DB --> API: Session and staff information
+
+alt Session invalid or expired
+    API --> UI: 401 Unauthorized
+else Session valid but role not permitted
+    API --> UI: 403 Forbidden
+else Session valid and role permitted
+    API -> API: Execute authorized operation
+    API --> UI: 200 OK + response data
+end
+
+deactivate API
+
+== Staff Logout ==
+
+Staff -> UI: Click Logout
+UI -> API: POST /api/auth/logout
+activate API
+
+API -> DB: Revoke current session
+DB --> API: Session revoked
+
+API --> UI: 200 OK + clear session cookie
+UI --> Staff: Return to login page
+
+deactivate API
+
+== Access After Logout ==
+
+Staff -> UI: Request protected function
+UI -> API: API request
+activate API
+
+API --> UI: 401 Unauthorized
+UI --> Staff: Login required
+
+deactivate API
+
+@enduml

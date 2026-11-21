@@ -1,0 +1,91 @@
+
+@startuml seq_availability
+
+title Hotel Reservation System - Availability Search
+
+autonumber
+
+actor "Guest" as Guest
+participant "React Frontend" as UI
+participant "FastAPI Backend" as API
+participant "Availability Service" as AS
+database "PostgreSQL Database" as DB
+
+== Enter Search Information ==
+
+Guest -> UI: Enter check-in, check-out,\nguest count and optional room type
+UI -> API: GET /api/availability
+activate API
+
+API -> API: Validate dates, guest count,\nand optional room type filter
+
+alt Invalid Search Input
+    API --> UI: 422 Unprocessable Entity
+    UI --> Guest: Display validation error
+
+else Valid Search Input
+
+    API -> AS: Search availability
+    activate AS
+
+    AS -> AS: Get current server time
+
+    AS -> DB: Query room types matching\nguest capacity and optional filter
+    DB --> AS: Matching room types
+
+    loop For each matching Room Type
+
+        AS -> DB: Get eligible physical-room inventory
+        DB --> AS: Room inventory information
+
+        AS -> DB: Get overlapping reservations\nand Pending holds
+        DB --> AS: Reservation dates, statuses,\nand hold expiration times
+
+        loop For each night of requested stay
+
+            AS -> AS: Count inventory-consuming\nConfirmed and CheckedIn bookings
+
+            AS -> AS: Count Pending holds\nwhere expires_at > server time
+
+            AS -> AS: Calculate remaining room units
+
+        end
+
+        AS -> AS: Find minimum available units\nacross all requested nights
+
+        alt Available units >= 1
+            AS -> AS: Add Room Type to results
+        else No available units
+            AS -> AS: Exclude Room Type
+        end
+
+    end
+
+    AS --> API: Available room types and rates
+    deactivate AS
+
+    API --> UI: 200 OK + available room types
+    UI --> Guest: Display available rooms
+
+end
+
+deactivate API
+
+note over AS, DB
+Date ranges overlap when:
+existing.check_in < requested.check_out
+AND
+existing.check_out > requested.check_in
+
+Check-out date is exclusive.
+Expired Pending holds do not consume inventory.
+Future Out-of-Order inventory rules are TBD.
+end note
+
+note over UI, API
+Availability search does not create a hold.
+Increment 5 must atomically recheck
+inventory before creating a Pending hold.
+end note
+
+@enduml

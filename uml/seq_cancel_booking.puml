@@ -1,0 +1,62 @@
+@startuml seq_cancel_booking
+title Increment 6 - Cancel Booking (FR-RS-06)
+autonumber
+hide footbox
+
+actor Guest
+actor Receptionist
+boundary "Guest / Staff UI" as UI
+control "Booking Management API" as API
+control "Access Control" as Auth
+control "Billing / Simulated Payment" as Billing
+database "Hotel Database" as DB
+
+== Request and authorization ==
+alt Guest cancellation
+  Guest -> UI : Request booking cancellation
+  UI -> API : Cancel (reference, code, requestId)
+  API -> Auth : Rate-limit; verify reference + code
+  Auth -> DB : Retrieve code hash for reference
+  DB --> Auth : Record/hash or no match
+  Auth -> Auth : Verify code and booking scope
+else Receptionist cancellation
+  Receptionist -> UI : Request cancellation using staff account
+  UI -> API : Cancel (reservationId, staffSession, requestId)
+  API -> Auth : Check staff session and Receptionist role
+end
+Auth --> API : Authorized / denied
+
+alt Unauthorized
+  API --> UI : Deny without booking details
+else Authorized
+  API -> DB : BEGIN; lock reservation and check requestId
+  DB --> API : Status, check-in time and prior result (if any)
+  alt Request already processed
+    API -> DB : End transaction without a second refund
+    API --> UI : Return previously recorded cancellation outcome
+  else New request
+    API -> API : Check Confirmed status, no check-in, and\nserver time < 14:00 on scheduled check-in date
+    alt Not Confirmed or at/after check-in cutoff
+      API -> DB : ROLLBACK
+      API --> UI : Deny; inventory and payment unchanged
+    else Eligible cancellation
+      API -> DB : Mark Cancelled, release booked nights,\nrecord refund eligibility/requestId and audit; COMMIT
+      DB --> API : Cancellation saved
+      alt At least 24h before scheduled check-in
+        API -> Billing : Process full eligible simulated refund (requestId)
+        Billing --> API : Refunded / needs reconciliation
+      else Less than 24h but before check-in
+        API -> Billing : Record no-refund decision
+        Billing --> API : No refund
+      end
+      API --> UI : Return cancellation and refund status
+    end
+  end
+end
+
+note over API,DB
+  Cancelled status stays committed even if a refund needs reconciliation.
+  Do not refund twice for duplicate requests.
+  A Pending hold can be cancelled in Increment 5's payment flow.
+end note
+@enduml

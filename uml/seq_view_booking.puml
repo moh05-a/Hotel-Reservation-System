@@ -1,0 +1,51 @@
+@startuml seq_view_booking
+title Increment 6 - View Booking (FR-RS-04)
+autonumber
+hide footbox
+
+actor Guest
+actor Receptionist
+boundary "Guest / Staff UI" as UI
+control "Booking Management API" as API
+control "Access Control" as Auth
+database "Hotel Database" as DB
+
+== Guest views one booking ==
+Guest -> UI : Enter booking reference and secret code
+UI -> API : Request booking details (reference, code)
+API -> Auth : Apply rate limit and verify credentials
+Auth -> DB : Find reference and retrieve stored code hash
+DB --> Auth : Record/hash or no match
+Auth -> Auth : Verify supplied code against hash
+alt Unknown reference, invalid code, or rate limit
+  Auth --> API : Access denied
+  API --> UI : Generic error; no booking details
+else Verified guest credentials
+  Auth --> API : Authorized for this reservation only
+  API -> DB : Load permitted details and current status
+  DB --> API : One reservation
+  API --> UI : Display this booking only
+  UI --> Guest : Show status and booking details
+end
+
+== Receptionist views a booking ==
+Receptionist -> UI : Search using signed-in staff account
+UI -> API : Request booking details (reference, staffSession)
+API -> Auth : Check staff session and Receptionist permission
+alt Not authorized
+  Auth --> API : Deny
+  API --> UI : Access denied
+else Authorized Receptionist
+  Auth --> API : Allow staff lookup
+  API -> DB : Load permitted reservation details
+  DB --> API : Reservation details
+  API --> UI : Display booking to staff
+  UI --> Receptionist : Show booking
+end
+
+note over UI,Auth
+  A guest's code never grants access to another booking
+  or the guest's full hotel history.
+  Staff authorization never requires the guest's code.
+end note
+@enduml

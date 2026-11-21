@@ -1,0 +1,41 @@
+@startuml use_case_booking_management
+title Increment 6 - Booking Viewing and Changes - Use Case Diagram
+left to right direction
+skinparam packageStyle rectangle
+
+actor Guest
+actor Receptionist
+
+rectangle "Hotel Reservation System" {
+  usecase "View Booking" as View
+  usecase "Modify Booking" as Modify
+  usecase "Cancel Booking" as Cancel
+  usecase "Authorize Booking Access" as Verify
+  usecase "Check Change Eligibility" as Eligible
+  usecase "Check Date Availability" as Availability
+  usecase "Settle Price Difference\n(Simulated)" as Settle
+  usecase "Apply Cancellation\nRefund Policy" as Refund
+}
+
+Guest -- View
+Guest -- Modify
+Guest -- Cancel
+Receptionist -- View
+Receptionist -- Modify
+Receptionist -- Cancel
+
+View ..> Verify : <<include>>
+Modify ..> Verify : <<include>>
+Cancel ..> Verify : <<include>>
+Modify ..> Eligible : <<include>>
+Cancel ..> Eligible : <<include>>
+Availability ..> Modify : <<extend>> (date change)
+Settle ..> Modify : <<extend>> (price difference)
+Cancel ..> Refund : <<include>>
+
+note bottom of Verify
+  Guests provide reference + secret code.
+  Receptionists use staff authorization instead.
+  Access is restricted to one booking.
+end note
+@enduml

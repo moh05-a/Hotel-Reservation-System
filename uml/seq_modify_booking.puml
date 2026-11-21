@@ -1,0 +1,84 @@
+@startuml seq_modify_booking
+title Increment 6 - Modify Booking (FR-RS-05)
+autonumber
+hide footbox
+
+actor Guest
+actor Receptionist
+boundary "Guest / Staff UI" as UI
+control "Booking Management API" as API
+control "Access Control" as Auth
+control "Availability Service" as Avail
+control "Billing / Simulated Payment" as Billing
+database "Hotel Database" as DB
+
+== Request and authorization ==
+alt Guest modification
+  Guest -> UI : Submit contact / guest count / date change
+  UI -> API : Modify (reference, code, change, requestId)
+  API -> Auth : Verify reference and code; rate-limit attempts
+  Auth -> DB : Find reference and stored code hash
+  DB --> Auth : Booking/hash or no match
+  Auth -> Auth : Check code and per-booking scope
+else Receptionist modification
+  Receptionist -> UI : Submit change using staff account
+  UI -> API : Modify (reservationId, staffSession, change, requestId)
+  API -> Auth : Verify staff session and Receptionist role
+end
+Auth --> API : Authorized / denied
+
+alt Unauthorized
+  API --> UI : Deny without revealing booking details
+else Authorized
+  API -> DB : Read Confirmed status, original dates and version
+  DB --> API : Current booking data
+  alt Booking not Confirmed
+    API --> UI : Reject; booking unchanged
+  else Booking Confirmed
+    API -> API : Validate fields, guest capacity and change policy
+    opt Dates are changed
+      API -> API : Require >= 24h before original 14:00 check-in
+      API -> Avail : Precheck new nights (exclude current reservation)
+      Avail --> API : Available / unavailable
+    end
+    alt Invalid input, late date change or no inventory
+      API --> UI : Reject; original booking unchanged
+    else Eligible change
+      API -> Billing : Calculate revised JOD total and difference
+      Billing --> API : Positive / zero / negative difference
+      opt Positive difference
+        API -> Billing : Attempt simulated additional payment (requestId)
+        Billing --> API : Successful / failed
+      end
+      alt Required payment failed
+        API --> UI : Reject; original booking unchanged
+      else Payment not needed or successful
+        API -> DB : BEGIN; lock booking and affected nightly inventory
+        API -> DB : Recheck version, status, cutoff and capacity
+        DB --> API : Eligible / conflict
+        alt Conflict or changed eligibility
+          API -> DB : ROLLBACK
+          opt Additional payment already succeeded
+            API -> Billing : Reverse or reconcile simulated charge
+          end
+          API --> UI : Reject; original booking unchanged
+        else Eligible after recheck
+          API -> DB : Commit updated details, dates/price snapshot,\ninventory difference and audit record
+          DB --> API : Updated reservation saved
+          opt Negative price difference
+            API -> Billing : Refund simulated difference (requestId)
+            Billing --> API : Refunded / needs reconciliation
+          end
+          API --> UI : Return updated booking (same reference and code)
+        end
+      end
+    end
+  end
+end
+
+note over API,DB
+  A date change atomically releases old nights and consumes new nights.
+  A failed change must preserve the original reservation.
+  Payment/refund attempts use idempotency identifiers.
+end note
+@enduml

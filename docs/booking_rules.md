@@ -90,11 +90,11 @@ Required inputs: room type, check-in date, check-out date, positive guest count,
 ## 9. No-show policy (Increments 6–7)
 
 - Standard arrival/check-in starts at **14:00** on the scheduled check-in day.
-- If the guest has **not checked in by 12:00 noon on the following day**, an eligible Confirmed booking becomes `NoShow` (subject to a staff-recorded exception made before the deadline).
+- If the guest has **not checked in by 12:00 noon on the following day**, an eligible Confirmed booking becomes `NoShow`; no late-arrival exception is included in the initial policy.
 - `NoShow` receives **no simulated refund** under the initial policy.
 - Release any remaining future room-type inventory. Record the state change for audit purposes.
-- The system may perform the deadline transition automatically, while allowing authorized receptionist handling of documented exceptions.
-- The exact user interface and staff procedure for late-arrival exceptions are implementation details to agree before Increment 7.
+- The system may perform the deadline transition automatically and record the status change for audit purposes.
+- A reservation already marked `NoShow` cannot proceed through normal check-in under the initial policy.
 
 ## 10. Modification policy (Increment 6)
 

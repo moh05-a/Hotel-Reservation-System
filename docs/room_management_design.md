@@ -42,11 +42,16 @@ Each physical room contains:
 | room_number | Unique hotel room number |
 | room_type_id | Reference to the associated Room Type |
 | is_active | Indicates whether the room is active |
-| housekeeping_status | Current cleaning or operational condition |
+| cleaning_status | Clean, Dirty, or Inspected |
+| operational_status | In Service or Out of Order |
 
 The Hotel Manager can add, view, update, and safely deactivate rooms.
 
 Physical rooms are not assigned when a guest creates a reservation. A suitable room is assigned later during check-in.
+
+Cleaning and operational statuses are represented separately. A room can be clean but Out of Order, so these conditions should not be treated as the same property.
+
+The detailed rules for updating room statuses belong to Increment 9.
 
 ## 4. Room Management Rules
 
@@ -83,7 +88,7 @@ The detailed tax calculation and payment process belong to later increments.
 | Create or update physical rooms | Yes | No | No |
 | Update nightly rates | Yes | No | No |
 | Deactivate physical rooms | Yes | No | No |
-| Update housekeeping status | No | No | Yes |
+| Update cleaning/operational status | No | No | Yes |
 
 Housekeeping status updates will be implemented in Increment 9. This increment only defines the shared room data needed for that feature.
 
@@ -93,7 +98,7 @@ All permissions must be enforced by the backend.
 
 The database uses a one-to-many relationship:
 
-**RoomType (1) → (Many) Room**
+**RoomType (1) → (0..*) Room**
 
 One Room Type can contain multiple physical rooms, but each physical room belongs to exactly one Room Type.
 
@@ -117,6 +122,8 @@ The system must reject invalid operations, including:
 
 Permanent deletion is avoided where it could destroy historical relationships.
 
+The database design also includes unique constraints on room numbers and foreign key relationships between Room and RoomType.
+
 ## 9. Dependencies on Other Increments
 
 **Increment 1 — Authentication:** Provides staff accounts, authentication, and permission checks.
@@ -127,16 +134,17 @@ Permanent deletion is avoided where it could destroy historical relationships.
 
 **Increment 7 — Check-in/Check-out:** Assigns eligible physical rooms during check-in.
 
-**Increment 9 — Housekeeping:** Maintains the cleaning and operational status of physical rooms.
+**Increment 9 — Housekeeping:** Maintains the cleaning and operational statuses of physical rooms.
 
 ## 10. Open Design Decisions
 
 The following details require coordination with other increment owners:
 
 - How Out-of-Order room periods reduce future availability.
-- Which housekeeping statuses make rooms ready for assignment.
+- Which cleaning statuses make rooms ready for assignment.
 - How room deactivation affects future confirmed reservations and Pending holds.
 - Which room-type changes are allowed when reservations already exist.
+- Which room-status transitions are permitted and how these changes are recorded.
 
 These decisions will be finalized with the relevant team members before implementing the affected features.
 

@@ -76,6 +76,9 @@ alt Stay is not active
     API --> UI: Display validation error
 else Stay is active
     SS -> DB: Record checkout time and end stay
+    SS -> API: Request folio finalization
+    API -> DB: Close folio, add early/late checkout charge if applicable
+    DB --> API: Folio closed, balance due
     SS -> RMS: Request room status update
     RMS -> DB: Update room readiness status
     DB --> RMS: Room updated

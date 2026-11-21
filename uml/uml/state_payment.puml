@@ -1,0 +1,22 @@
+@startuml state_payment
+title Increment 8 - Simulated Payment Transaction States
+hide empty description
+
+[*] --> Pending : attempt created (attemptId)
+Pending --> Successful : simulated gateway approves
+Pending --> Failed : simulated gateway declines
+Successful --> Reversed : booking not confirmed\n(expired hold / commit failed)
+Successful --> Refunded : policy-eligible refund
+Successful --> NeedsReconciliation : reversal or refund result unknown
+NeedsReconciliation --> Reversed : resolved
+NeedsReconciliation --> Refunded : resolved
+Failed --> [*]
+Reversed --> [*]
+Refunded --> [*]
+
+note right of Failed
+  Booking stays Pending and
+  retry is allowed until the
+  original hold deadline.
+end note
+@enduml

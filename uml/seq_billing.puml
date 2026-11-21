@@ -1,0 +1,162 @@
+﻿@startuml seq_billing
+title Increment 8 - Billing and Simulated Payments
+
+autonumber
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+
+actor Guest
+actor Receptionist
+participant "Booking Service (Inc. 5)" as BK
+participant "Staff UI" as UI
+participant "Billing API" as API
+participant "Folio Service" as FS
+participant "Pricing Service" as PS
+participant "Invoice Service" as IS
+participant "Simulated Payment Service" as PAY
+database "Hotel Database" as DB
+
+== Mandatory Booking Payment (shared with Increment 5) ==
+
+Guest -> BK: Pay for active Pending hold (holdId, attemptId)
+BK -> API: Record booking payment (reservationId, amount, attemptId)
+API -> DB: Find payment by attemptId
+DB --> API: Existing / not found
+alt attemptId already processed
+    API --> BK: Return original result (no duplicate charge)
+else New attempt
+    API -> PAY: Process simulated payment
+    PAY --> API: Successful / Failed
+    API -> DB: Save payment_transaction (type=Booking, status, attemptId)
+    API --> BK: Outcome
+end
+note over API,DB
+  Failed attempts are recorded and the hold stays Pending.
+  Confirmation is only allowed for a Successful payment.
+end note
+
+== Reversal of Unusable Payment ==
+
+BK -> API: Payment succeeded but hold expired / commit failed
+API -> PAY: Reverse simulated payment
+alt Reversal successful
+    PAY --> API: Reversed
+    API -> DB: Save reversal (status=Reversed, linked to original)
+else Reversal failed or unknown
+    PAY --> API: Failed / unknown
+    API -> DB: Mark original NeedsReconciliation
+end
+
+== Folio Creation (at check-in) ==
+
+Receptionist -> UI: Open checked-in stay
+UI -> API: Request folio (reservationId, stayId)
+API -> API: Check staff role and permission
+API -> FS: Create or retrieve folio
+FS -> DB: Find folio by reservation
+DB --> FS: Existing / not found
+
+alt Folio does not exist
+    FS -> PS: Build accommodation charges from price snapshot
+    PS -> DB: Retrieve price snapshot, check-in and check-out dates
+    DB --> PS: Nightly rate snapshot and dates
+    PS -> PS: nights x nightly rate
+    FS -> DB: Create folio (Open) with accommodation charge,\nattach prior successful booking payments as credits
+    DB --> FS: Folio created
+end
+FS --> API: Folio details with balance
+API --> UI: Display folio
+
+== Extra Charges ==
+
+Receptionist -> UI: Add extra charge
+UI -> API: Submit description, quantity, unit price, requestId
+API -> API: Check staff role
+API -> FS: Validate and add extra charge
+FS -> DB: Check folio is Open and requestId not already used
+DB --> FS: Folio state / duplicate check
+
+alt Folio closed, invalid quantity or price, or duplicate requestId
+    FS --> API: Reject
+    API --> UI: Display error
+else Valid
+    FS -> DB: Save itemized charge, write audit record
+    DB --> FS: Saved
+    FS --> API: Updated folio
+    API --> UI: Display updated folio
+end
+
+== Tax and Invoice ==
+
+Receptionist -> UI: Generate invoice
+UI -> API: Request invoice
+API -> PS: Calculate invoice totals
+PS -> DB: Retrieve folio charges and tax configuration
+DB --> PS: Charges and configured tax rate
+PS -> PS: subtotal = sum of lines;\ntax = round_half_up(subtotal x rate, 3);\ntotal = subtotal + tax
+note over PS
+  Currency is JOD, 3 decimal places.
+  Tax rate is configurable.
+  Tax is computed once on the subtotal, not per line.
+end note
+PS --> API: Totals
+API -> IS: Generate itemized invoice
+IS -> DB: Save invoice with line-item snapshot and invoice number
+DB --> IS: Invoice saved
+IS --> API: Invoice details
+API --> UI: Display invoice, paid amount and balance due
+
+== Additional Simulated Payment ==
+
+Receptionist -> UI: Record payment
+UI -> API: Submit amount, method, attemptId
+API -> API: Validate amount > 0 and attemptId not used
+API -> PAY: Process simulated payment
+
+alt Payment successful
+    PAY --> API: Success and transaction reference
+    API -> DB: Save payment (Successful), write audit record
+    API --> UI: Display payment and updated balance
+else Payment failed
+    PAY --> API: Failed
+    API -> DB: Save payment (Failed)
+    API --> UI: Display failure
+end
+
+== Refund ==
+
+Receptionist -> UI: Request refund (reservationId, reason)
+UI -> API: Submit refund request, requestId
+API -> API: Check staff role
+API -> PS: Determine refund eligibility
+PS -> DB: Load reservation, check-in time, payments, prior refunds
+DB --> PS: Data
+PS -> PS: Apply cancellation policy (24 h before 14:00 check-in);\nrefundable = paid - already refunded
+
+alt Not eligible or amount is zero
+    PS --> API: Refund 0.000 JOD with reason
+    API --> UI: Display no-refund result
+else Eligible
+    API -> PAY: Process simulated refund against original payment
+    alt Refund successful
+        PAY --> API: Refunded
+        API -> DB: Save refund (Successful), write audit record
+        API --> UI: Display refund confirmation
+    else Refund failed
+        PAY --> API: Failed / unknown
+        API -> DB: Save refund (NeedsReconciliation)
+        API --> UI: Display failure
+    end
+end
+
+== Check-out (hook from Increment 7) ==
+
+Receptionist -> UI: Check out stay
+UI -> API: Finalize folio (stayId)
+API -> FS: Close folio
+FS -> DB: Add any early/late checkout charge, set Closed
+DB --> FS: Closed, balance
+FS --> API: Final folio
+API --> UI: Show balance due or settled
+
+@enduml

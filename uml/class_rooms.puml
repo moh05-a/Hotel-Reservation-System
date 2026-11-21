@@ -1,0 +1,101 @@
+
+@startuml
+
+title Hotel Reservation System - Room Management Class Diagram
+
+skinparam classAttributeIconSize 0
+left to right direction
+
+' ==========================================
+' ROOM TYPE
+' ==========================================
+
+class RoomType {
+    +roomTypeId: UUID
+    +name: String
+    +description: String
+    +maxGuests: Integer
+    +nightlyRate: Decimal
+}
+
+' ==========================================
+' PHYSICAL ROOM
+' ==========================================
+
+class Room {
+    +roomId: UUID
+    +roomNumber: String
+    +isActive: Boolean
+    +cleaningStatus: CleaningStatus
+    +operationalStatus: OperationalStatus
+}
+
+' ==========================================
+' ROOM STATUSES
+' ==========================================
+
+enum CleaningStatus {
+    CLEAN
+    DIRTY
+    INSPECTED
+}
+
+enum OperationalStatus {
+    IN_SERVICE
+    OUT_OF_ORDER
+}
+
+' ==========================================
+' ROOM MANAGEMENT SERVICE
+' ==========================================
+
+class RoomManagementService {
+    +createRoomType()
+    +updateRoomType()
+    +updateNightlyRate()
+    +addRoom()
+    +updateRoom()
+    +deactivateRoom()
+    +getRoomTypes()
+    +getRooms()
+}
+
+' ==========================================
+' RELATIONSHIPS
+' ==========================================
+
+RoomType "1" -- "0..*" Room : contains
+
+Room --> CleaningStatus
+Room --> OperationalStatus
+
+RoomManagementService ..> RoomType : manages
+RoomManagementService ..> Room : manages
+
+' ==========================================
+' VALIDATION RULES
+' ==========================================
+
+note right of RoomType
+    maxGuests > 0
+    nightlyRate >= 0
+    Currency: JOD
+end note
+
+note bottom of Room
+    roomNumber must be unique.
+    Every room belongs to one RoomType.
+    Inactive rooms cannot be assigned.
+    Deactivation must preserve
+    existing reservation/stay integrity.
+end note
+
+note bottom of RoomManagementService
+    Management operations require
+    Hotel Manager authorization.
+
+    Other authorized staff may
+    view permitted room information.
+end note
+
+@enduml

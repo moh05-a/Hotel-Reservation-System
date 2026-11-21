@@ -8,7 +8,7 @@ participant "Auth Middleware\n(RBAC)" as Auth
 participant "Dashboard Service" as Service
 database "Application DB\n(SQLAlchemy)" as DB
 
-Manager -> UI : Open Operations Dashboard\n(select start_date, end_date)
+Manager -> UI : Open Operations Dashboard\n(optional start_date, end_date;\ndefaults to [today, tomorrow))
 UI -> API : GET /api/dashboard/metrics?start_date&end_date\n(with staff token)
 API -> Auth : Verify session & Hotel Manager role (FR-AU-02, NFR-03)
 
@@ -18,18 +18,19 @@ alt Unauthorized or non-Manager role
   UI --> Manager : Display "Access Denied"
 else Authorized Hotel Manager
   Auth --> API : Role verified (Hotel Manager)
+  API -> API : Validate range (reject end_date <= start_date with 400)
   API -> Service : get_dashboard_metrics(start_date, end_date)
 
-  Service -> DB : Query active rooms & housekeeping statuses\n(Room)
-  DB --> Service : Room counts by status & active capacity
+  Service -> DB : Query current room states & historical availability\n(Room, RoomStatusHistory)
+  DB --> Service : Current 5-state counts & historical active room-nights
 
-  Service -> DB : Query stays & reservations in range\n(Reservation, Stay)
+  Service -> DB : Query stays & reservations in [start_date, end_date)\n(Reservation, Stay)
   DB --> Service : Occupied room-nights, arrivals, departures
 
-  Service -> DB : Query completed payments & refunds in range\n(Folio, Payment, Refund)
-  DB --> Service : Net recognized revenue
+  Service -> DB : Query earned folio charges in [start_date, end_date)\n(Folio, FolioCharge, Stay)
+  DB --> Service : Recognized revenue (earned accommodation & services)
 
-  Service -> Service : Compute occupancy %, arrivals/departures,\nrevenue total, and readiness breakdown
+  Service -> Service : Compute occupancy %, arrivals/departures,\nrecognized revenue & 5-state readiness summary
   Service --> API : DashboardMetricsDTO (JSON)
   API --> UI : 200 OK (Dashboard JSON)
   UI --> Manager : Render KPI cards, readiness counts & summary
